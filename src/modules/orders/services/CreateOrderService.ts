@@ -57,37 +57,29 @@ class CreateOrderService {
       );
     }
 
-    const findProductsWithNoQuantityAvailable = products.filter(
-      product =>
-        existentProducts.filter(p => p.id === product.id)[0].quantity <
-        product.quantity,
-    );
+    products.forEach(({ id, quantity }) => {
+      const indexProduct = existentProducts.findIndex(
+        product => product.id === id,
+      );
+      if (quantity > existentProducts[indexProduct].quantity) {
+        throw new AppError(
+          `The quantity of ${existentProducts[indexProduct].name} is above stock limit`,
+        );
+      }
+    });
 
-    if (findProductsWithNoQuantityAvailable.length) {
-      throw new AppError('Some products have no available stock.');
-    }
+    await this.productsRepository.updateQuantity(products);
 
-    const serializedProducts = products.map(product => ({
+    const serializedProducts = existentProducts.map(product => ({
       product_id: product.id,
-      quantity: product.quantity,
-      price: existentProducts.filter(p => p.id === product.id)[0].price,
+      quantity: products[products.findIndex(p => p.id === product.id)].quantity,
+      price: product.price,
     }));
 
     const order = await this.ordersRepository.create({
       customer: customerExists,
       products: serializedProducts,
     });
-
-    const { order_products } = order;
-
-    const orderedProductsQuantity = order_products.map(product => ({
-      id: product.product_id,
-      quantity:
-        existentProducts.filter(p => p.id === product.product_id)[0].quantity -
-        product.quantity,
-    }));
-
-    await this.productsRepository.updateQuantity(orderedProductsQuantity);
 
     return order;
   }
